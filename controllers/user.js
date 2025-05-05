@@ -140,14 +140,26 @@ const createUser = async (req, res) => {
 // Get all users
 const getAllUsers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, sort = "createdAt" } = req.query;
-    const users = await User.find()
+    const { page = 1, limit = 10, sort = "createdAt", search = "" } = req.query;
+    let query = {};
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      query = {
+        $or: [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { code: searchRegex },
+          { email: searchRegex },
+        ],
+      };
+    }
+    const users = await User.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort(sort)
       .select("-password");
 
-    const total = await User.countDocuments();
+    const total = await User.countDocuments(query);
 
     res.status(200).json({
       success: true,
@@ -371,7 +383,9 @@ const importEmployees = async (req, res) => {
         // Check if user already exists
         const existingUser = await User.findOne({ code: userData.code });
         if (existingUser) {
-          errors.push(`User with name ${userData.firstName} ${userData.firstName} already exists`);
+          errors.push(
+            `User with name ${userData.firstName} ${userData.firstName} already exists`
+          );
           continue;
         }
 

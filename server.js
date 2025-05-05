@@ -6,6 +6,8 @@ const path = require("path");
 const multer = require("multer");
 const UserRourtes = require("./routes/user");
 const ProjectRourtes = require("./routes/project");
+const EquipmentRoutes = require("./routes/equipment");
+const InterventionRoutes = require("./routes/intervention");
 
 const port = process.env.PORT || 3000;
 
@@ -19,6 +21,8 @@ server.use("/uploads/images", express.static(path.join("uploads", "images")));
 
 server.use("/user", UserRourtes);
 server.use("/project", ProjectRourtes);
+server.use("/equipment", EquipmentRoutes);
+server.use("/intervention", InterventionRoutes);
 
 server.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {

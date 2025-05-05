@@ -11,10 +11,10 @@ router.get("/:id", projectController.getProjectById);
 
 // router.use(adminMiddleware);
 router.get("/", projectController.getAllProjects);
-router.post("/", projectController.createProject);
+// router.post("/", projectController.createProject);
 router.put("/:id", projectController.updateProject);
-router.delete("/:id", projectController.deleteProject);
-router.delete("/", projectController.deleteAllProjects);
+router.delete("/one/:id", projectController.deleteProject);
+router.delete("/all", projectController.deleteAllProjects);
 router.post("/import", fileUploader.single('data'), projectController.importProjects);
 
 module.exports = router;

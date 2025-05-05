@@ -44,6 +44,12 @@ const ProjectSchema = new mongoose.Schema(
       required: [true, "Ref Switcheur is required"],
       trim: true,
     },
+    equipments: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Equipment"
+      }
+    ],
     createdAt: {
       type: Date,
       default: Date.now,
