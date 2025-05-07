@@ -17,6 +17,19 @@ const InterventionSchema = new mongoose.Schema(
       required: [true, "Description is required"],
       trim: true,
     },
+    type: {
+      type: String,
+      enum: ["repair", "inspection", "setup", "test", "other"],
+      default: "other",
+      trim: true,
+      required: [true, "Type is required"],
+    },
+    status: {
+      type: String,
+      enum: ["pending", "in-progress", "completed"],
+      default: "pending",
+      required: [true, "Status is required"],
+    },
   },
   {
     timestamps: true,

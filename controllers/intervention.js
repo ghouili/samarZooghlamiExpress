@@ -6,7 +6,7 @@ const Project = require("../models/project");
 // Create a new intervention
 const createIntervention = async (req, res) => {
   try {
-    const { userId, projectId, description } = req.body;
+    const { userId, projectId, description, type, status } = req.body;
 
     // Validate userId
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -42,6 +42,8 @@ const createIntervention = async (req, res) => {
       userId,
       projectId,
       description,
+      type,
+      status,
     };
 
     const intervention = new Intervention(interventionData);
@@ -76,8 +78,8 @@ const getAllInterventions = async (req, res) => {
     console.log(req.query); // Log the query parameters for debugging
 
     // Convert limit and page to numbers
-    const limitNum = parseInt(limit);
-    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit) || 10;
+    const pageNum = parseInt(page) || 1;
 
     // Define the search regex only if search term is provided
     const searchRegex = search != "" ? new RegExp(search, "i") : null;
@@ -185,12 +187,14 @@ const getInterventionById = async (req, res) => {
 // Update intervention
 const updateIntervention = async (req, res) => {
   try {
-    const { userId, projectId, description } = req.body;
+    const { userId, projectId, description, type, status } = req.body;
 
     const updates = {
       userId,
       projectId,
       description,
+      type,
+      status,
     };
 
     Object.keys(updates).forEach(
