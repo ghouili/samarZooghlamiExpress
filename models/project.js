@@ -55,6 +55,18 @@ const ProjectSchema = new mongoose.Schema(
         ref: "Equipment",
       },
     ],
+    interventions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Intervention",
+      },
+    ],
+    users: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,

@@ -1,9 +1,10 @@
 const User = require("../models/user");
+const Project = require("../models/project");
 const { moveFile, cleanupFile } = require("../middlewares/Fileuploader");
-
 const generator = require("generate-password");
 const jwt = require("jsonwebtoken");
 const ExcelJS = require("exceljs");
+const mongoose = require("mongoose");
 const sendUserCreatedMail = require("./mailer");
 
 // Login
@@ -35,7 +36,13 @@ const loginUser = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
+      {
+        id: user._id,
+        email: user.email,
+        name: user.firstName + " " + user.lastName,
+        role: user.role,
+        picture: user.picture,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
@@ -59,6 +66,7 @@ const loginUser = async (req, res) => {
 // Create a new user
 const createUser = async (req, res) => {
   let tempFilePath = req.file?.path;
+
   let password;
   if (!req.body.password) {
     password = generator.generate({
@@ -72,6 +80,20 @@ const createUser = async (req, res) => {
   }
 
   try {
+    const { projectId } = req.body;
+    console.log(req.body);
+    if (projectId) {
+      console.log(projectId);
+
+      let projectExists = null;
+      if (projectId || mongoose.Types.ObjectId.isValid(projectId)) {
+        projectExists = await Project.findById(projectId);
+        if (!projectExists) {
+          throw new Error("Project not found");
+        }
+      }
+    }
+
     const userData = {
       firstName: req.body.firstName,
       lastName: req.body.lastName,
@@ -84,8 +106,11 @@ const createUser = async (req, res) => {
       post: req.body.post,
       affectation: req.body.affectation || "Indirect",
       dept: req.body.dept || "PPE",
-      project: req.body.project || "Common",
+      projectId: req.body.projectId || null,
     };
+    // if (projectId) {
+    // }
+    // console.log(userData);
 
     const user = new User(userData);
     const savedUser = await user.save();
@@ -107,7 +132,12 @@ const createUser = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: savedUser._id, email: savedUser.email, role: savedUser.role },
+      {
+        id: savedUser._id,
+        email: savedUser.email,
+        role: savedUser.role,
+        picture: savedUser.picture,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
@@ -138,13 +168,59 @@ const createUser = async (req, res) => {
 };
 
 // Get all users
+// const getAllUsers = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, sort = "createdAt", search = "" } = req.query;
+//     let query = {};
+//     if (search) {
+//       const searchRegex = new RegExp(search, "i");
+//       query = {
+//         $or: [
+//           { firstName: searchRegex },
+//           { lastName: searchRegex },
+//           { code: searchRegex },
+//           { email: searchRegex },
+//         ],
+//       };
+//     }
+//     const users = await User.find(query)
+//       .limit(limit * 1)
+//       .skip((page - 1) * limit)
+//       .sort(sort).populate("projectId")
+//       .select("-password");
+
+//     const total = await User.countDocuments(query);
+
+//     res.status(200).json({
+//       success: true,
+//       data: users,
+//       total,
+//       pages: Math.ceil(total / limit),
+//       currentPage: page,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+// Get all users with optional pagination and project data import
 const getAllUsers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, sort = "createdAt", search = "" } = req.query;
-    let query = {};
+    const { page, limit, sort = "createdAt", search } = req.query;
+
+    // Determine if pagination params are provided
+    const hasPagination = page !== undefined && limit !== undefined;
+    const limitNum = hasPagination ? parseInt(limit, 10) : null;
+    const pageNum = hasPagination ? parseInt(page, 10) : null;
+
+    // Build search query
+    let filter = {};
     if (search) {
       const searchRegex = new RegExp(search, "i");
-      query = {
+      filter = {
         $or: [
           { firstName: searchRegex },
           { lastName: searchRegex },
@@ -153,21 +229,37 @@ const getAllUsers = async (req, res) => {
         ],
       };
     }
-    const users = await User.find(query)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort(sort)
-      .select("-password");
 
-    const total = await User.countDocuments(query);
+    // Build Mongoose query
+    let query = User.find(filter)
+      .sort({ [sort]: -1 })
+      .select("-password")
+      .populate("projectId");
 
-    res.status(200).json({
+    // Apply pagination if requested
+    if (hasPagination) {
+      query = query.skip((pageNum - 1) * limitNum).limit(limitNum);
+    }
+
+    // Execute query
+    const users = await query.exec();
+
+    // Count total documents
+    const total = await User.countDocuments(filter);
+
+    // Build response
+    const response = {
       success: true,
       data: users,
       total,
-      pages: Math.ceil(total / limit),
-      currentPage: page,
-    });
+    };
+
+    if (hasPagination) {
+      response.pages = Math.ceil(total / limitNum);
+      response.currentPage = pageNum;
+    }
+
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -175,6 +267,8 @@ const getAllUsers = async (req, res) => {
     });
   }
 };
+
+module.exports = { getAllUsers };
 
 // Get single user by ID
 const getUserById = async (req, res) => {
@@ -201,6 +295,7 @@ const getUserById = async (req, res) => {
 // Update user
 const updateUser = async (req, res) => {
   let tempFilePath = req.file?.path;
+
   try {
     const updates = {
       firstName: req.body.firstName,
@@ -210,7 +305,7 @@ const updateUser = async (req, res) => {
       post: req.body.post,
       affectation: req.body.affectation,
       dept: req.body.dept,
-      project: req.body.project,
+      projectId: req.body.projectId, // Updated from project to projectId
       role: req.body.role,
       active: req.body.active,
     };
@@ -218,6 +313,16 @@ const updateUser = async (req, res) => {
     Object.keys(updates).forEach(
       (key) => updates[key] === undefined && delete updates[key]
     );
+
+    if (updates.projectId) {
+      if (!mongoose.Types.ObjectId.isValid(updates.projectId)) {
+        throw new Error("Invalid Project ID");
+      }
+      const projectExists = await Project.findById(updates.projectId);
+      if (!projectExists) {
+        throw new Error("Project not found");
+      }
+    }
 
     const existingUser = await User.findById(req.params.id);
     if (!existingUser) {
@@ -349,7 +454,7 @@ const importEmployees = async (req, res) => {
         firstName: row.getCell(2).value,
         lastName: row.getCell(3).value,
         dept: row.getCell(4).value || "PPE",
-        project: row.getCell(5).value || "Common",
+        projectId: null,
         post_hr: row.getCell(6).value || "Sampling",
         post: row.getCell(7).value || null,
         affectation: row.getCell(8).value || "Indirect",
@@ -406,6 +511,8 @@ const importEmployees = async (req, res) => {
           password: plainPassword,
         });
       } catch (err) {
+        console.log(err.message);
+
         errors.push(`Error importing user ${emp["code"]}: ${err.message}`);
       }
     }
@@ -436,9 +543,7 @@ const importEmployees = async (req, res) => {
 // Delete all users
 const deleteAllUsers = async (req, res) => {
   try {
-    const { confirm } = req.params;
-    console.log(confirm);
-
+    const { confirm } = req.query;
     if (confirm !== "DELETE_ALL") {
       return res.status(400).json({
         success: false,
@@ -446,16 +551,8 @@ const deleteAllUsers = async (req, res) => {
           "Confirmation required. Provide ?confirm=DELETE_ALL in the query.",
       });
     }
+    console.log("here");
 
-    // Fetch all users to delete their pictures
-    // const users = await User.find().select("picture");
-    // for (const user of users) {
-    //   if (user.picture && user.picture !== "avatar.png") {
-    //     await cleanupFile(user.picture);
-    //   }
-    // }
-
-    // Delete all users from the collection
     const result = await User.deleteMany({});
 
     res.status(200).json({
@@ -473,7 +570,7 @@ const deleteAllUsers = async (req, res) => {
   }
 };
 
-// Update user
+// Update active status
 const UdateActiveStatus = async (req, res) => {
   try {
     const existingUser = await User.findById(req.params.id);
@@ -496,9 +593,6 @@ const UdateActiveStatus = async (req, res) => {
       message: "User updated successfully",
     });
   } catch (error) {
-    if (tempFilePath) {
-      await cleanupFile(tempFilePath);
-    }
     res.status(400).json({
       success: false,
       message: error.message,

@@ -32,7 +32,7 @@ router.post(
   fileUploader.single("data"),
   userController.importEmployees
 );  
-router.delete("/all/:confirm", userController.deleteAllUsers);
+router.delete("/all", userController.deleteAllUsers);
 router.delete("/one/:id", userController.deleteUser);
 
 module.exports = router;

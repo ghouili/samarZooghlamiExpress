@@ -37,7 +37,7 @@ const moveFile = async (tempPath) => {
   const finalPath = path.join("uploads", "images", filename);
   await fs.mkdir(path.dirname(finalPath), { recursive: true });
   await fs.rename(tempPath, finalPath);
-  return finalPath;
+  return path.basename(finalPath);
 };
 
 const cleanupFile = async (filePath) => {

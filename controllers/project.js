@@ -43,16 +43,84 @@ const createProject = async (req, res) => {
 };
 
 // Get all projects
+// const getAllProjects = async (req, res) => {
+//   try {
+//     const { page, limit, sort = "createdAt", search } = req.query;
+//     // const { page = 1, limit = 10, sort = "createdAt", search = "" } = req.query;
+
+//     const limitNum = parseInt(limit) || 1; // Default limit to 1 if not provided
+//     const pageNum = parseInt(page) || 10; // Default limit to 10 if not provided
+
+//     const searchRegex = search ? new RegExp(search, "i") : null;
+
+//     const pipeline = [
+//       {
+//         $lookup: {
+//           from: "equipments",
+//           localField: "equipments",
+//           foreignField: "_id",
+//           as: "equipments",
+//         },
+//       },
+//     ];
+
+//     if (searchRegex) {
+//       pipeline.push({
+//         $match: {
+//           $or: [
+//             { code: searchRegex },
+//             { cmn: searchRegex },
+//             { refTSK: searchRegex },
+//             { refS: searchRegex },
+//             { "equipments.assetNumber": searchRegex }, // Search in populated equipments.assetNumber
+//           ],
+//         },
+//       });
+//     }
+
+//     // Add sorting, skip, and limit for pagination
+//     pipeline.push({ $sort: { [sort]: -1 } }); // Maintain original descending sort
+//     pipeline.push({ $skip: (pageNum - 1) * limitNum });
+//     pipeline.push({ $limit: limitNum });
+
+//     // Execute the main pipeline to fetch projects
+//     const projects = await Project.aggregate(pipeline);
+
+//     // Create a separate pipeline for total count (exclude skip and limit)
+//     const totalPipeline = [...pipeline.slice(0, -2)]; // Remove $skip and $limit
+//     const totalResult = await Project.aggregate([
+//       ...totalPipeline,
+//       { $count: "total" },
+//     ]);
+//     const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+//     res.status(200).json({
+//       success: true,
+//       data: projects,
+//       total,
+//       pages: Math.ceil(total / limitNum),
+//       currentPage: pageNum,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
 const getAllProjects = async (req, res) => {
   try {
     const { page, limit, sort = "createdAt", search } = req.query;
-    // const { page = 1, limit = 10, sort = "createdAt", search = "" } = req.query;
 
-    const limitNum = parseInt(limit) || 1; // Default limit to 1 if not provided
-    const pageNum = parseInt(page) || 10; // Default limit to 10 if not provided
+    // Parse pagination parameters if provided
+    const hasPagination = page !== undefined && limit !== undefined;
+    const limitNum = hasPagination ? parseInt(limit, 10) : null;
+    const pageNum = hasPagination ? parseInt(page, 10) : null;
 
     const searchRegex = search ? new RegExp(search, "i") : null;
 
+    // Base aggregation pipeline with lookup and optional search
     const pipeline = [
       {
         $lookup: {
@@ -72,35 +140,45 @@ const getAllProjects = async (req, res) => {
             { cmn: searchRegex },
             { refTSK: searchRegex },
             { refS: searchRegex },
-            { "equipments.assetNumber": searchRegex }, // Search in populated equipments.assetNumber
+            { "equipments.assetNumber": searchRegex },
           ],
         },
       });
     }
 
-    // Add sorting, skip, and limit for pagination
-    pipeline.push({ $sort: { [sort]: -1 } }); // Maintain original descending sort
-    pipeline.push({ $skip: (pageNum - 1) * limitNum });
-    pipeline.push({ $limit: limitNum });
+    // Always sort
+    pipeline.push({ $sort: { [sort]: -1 } });
 
-    // Execute the main pipeline to fetch projects
+    // Conditionally add pagination stages
+    if (hasPagination) {
+      pipeline.push({ $skip: (pageNum - 1) * limitNum });
+      pipeline.push({ $limit: limitNum });
+    }
+
+    // Execute aggregation to fetch projects
     const projects = await Project.aggregate(pipeline);
 
-    // Create a separate pipeline for total count (exclude skip and limit)
-    const totalPipeline = [...pipeline.slice(0, -2)]; // Remove $skip and $limit
-    const totalResult = await Project.aggregate([
-      ...totalPipeline,
-      { $count: "total" },
-    ]);
+    // Get total count (without pagination stages)
+    const countPipeline = pipeline.filter((stage) => {
+      return !("$skip" in stage) && !("$limit" in stage);
+    });
+    countPipeline.push({ $count: "total" });
+    const totalResult = await Project.aggregate(countPipeline);
     const total = totalResult.length > 0 ? totalResult[0].total : 0;
 
-    res.status(200).json({
+    // Prepare pagination info
+    const response = {
       success: true,
       data: projects,
       total,
-      pages: Math.ceil(total / limitNum),
-      currentPage: pageNum,
-    });
+    };
+
+    if (hasPagination) {
+      response.pages = Math.ceil(total / limitNum);
+      response.currentPage = pageNum;
+    }
+
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({
       success: false,
